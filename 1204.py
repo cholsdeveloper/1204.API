@@ -183,9 +183,11 @@ import random
 import threading
 from concurrent.futures import ThreadPoolExecutor as sux
 
-completed_orders = 0  # Track completed shares
-completed_orders_lock = threading.Lock()  # Prevent race conditions
+import time
+import random as rd
+from concurrent.futures import ThreadPoolExecutor as sux
 
+# ✅ Main Function
 def process_orders():
     """Fetch and Process Orders with a countdown before checking new orders."""
     while True:
@@ -194,6 +196,7 @@ def process_orders():
         # ✅ Countdown before fetching order_data
         countdown_time = 10  # Adjust countdown time as needed
         for remaining in range(countdown_time, 0, -1):
+            print('\r' + ' ' * 60, end='')  # Clear previous text
             print(f'\r━━━━━━{yellow} Waiting for new order {reset} : {remaining} seconds', end='', flush=True)
             time.sleep(1)  # Wait 1 second per countdown step
         
@@ -206,45 +209,38 @@ def process_orders():
                 quantity = int(order_data['quantity'])
                 order_link = order_data['link']
                 order_id = order_data['id']
-
                 if quantity > 0 and 'facebook.com' in order_link:
-                    completed_orders = 0  # Reset counter
+                    
+                    completed_orders = 0
                     start_time = time.time()  # ✅ Capture the start time
                     
                     # Fix Redirects
                     if '/share/' in order_link:
                         order_link = rq.get(order_link, headers=fb_helper.headers_web, allow_redirects=True).url
                     
+                    print(f"{darkblue}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{reset}")
                     print(f"📌 New Order : {order_id}{reset}")
+                    print(f"{darkblue}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{reset}")
                     print(f"📦 Quantity: {quantity}{reset}")
+                    print(f"{darkblue}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{reset}")
                     print(f"🔗 Link: {order_link}{reset}")
+                    print(f"{darkblue}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{reset}")
                   
-                    # ✅ Worker function (runs once per task)
                     def work():
-                        global completed_orders
                         try:
-                            fb_token = random.choice(fb_tokens)  # Pick a random token
-                            token = fb_token.strip().split('|')[1] if '|' in fb_token else fb_token  # Extract token part
-                            
-                            success = share_facebook_post([token], order_link, order_id, quantity)
-
-                            if success:  
-                                with completed_orders_lock:  # Prevent race conditions
-                                    completed_orders += 1
-                        except Exception as e:
-                            print(f"⚠️ Error in work(): {e}")  # ✅ Print errors for debugging
-
-                    # ✅ Use ThreadPoolExecutor (aliased as sux)
-                    with sux(max_workers=min(200, quantity)) as executor:  # Limit max workers to avoid excess
-                        futures = [executor.submit(work) for _ in range(quantity)]
-                        
-                        # ✅ Wait for all tasks to complete
-                        for future in futures:
-                            try:
-                                future.result()  # Catch any exceptions inside work()
-                            except Exception as e:
-                                print(f"⚠️ Task error: {e}")
-
+                            responces = True
+                            while responces:
+                                fb_token = rd.choice(fb_tokens)
+                                token = fb_token.split('|')[1]
+                                responces = share_facebook_post(token, order_link, order_id, quantity) 
+                        except:
+                            pass 
+                    
+                    with sux(max_workers=200) as sub:
+                        for _ in range(quantity):
+                            sub.submit(work)
+                        sub.shutdown()
+                    
                     # ✅ Capture the end time
                     end_time = time.time()
                     
@@ -257,12 +253,13 @@ def process_orders():
                     print(f"✅ Order ID {violet_chu}{order_id}{reset} Completed : Delivered {darkblue}{completed_orders}{reset} out of {red}{quantity}{reset}")         
                     print(f"⏳ Time Taken: {int(hours)}h {int(minutes)}m {int(seconds)}s")
                      
-                    # ✅ Save to file
+                    #✅ Save to file
                     save_order_to_txt(order_id, completed_orders, quantity, elapsed_time)
                     api.complete_order(order_id)
 
         except Exception as e:
             print(f"⚠️ Error: {e}")
+            pass
 
 # ✅ Start Processing Orders
 process_orders()
